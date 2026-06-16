@@ -17,18 +17,38 @@ def make_settings(**kwargs):
     return settings
 
 
-def make_mcp_response(tool_result: dict | list | str) -> dict:
+def make_mcp_sse(tool_result: dict | list | str) -> str:
+    """Return SSE-formatted MCP response text as GBrain HTTP server sends it."""
     if isinstance(tool_result, str):
-        text = tool_result
+        inner_text = tool_result
     else:
-        text = json.dumps(tool_result)
-    return {
+        inner_text = json.dumps(tool_result)
+    payload = {
         "jsonrpc": "2.0",
         "id": 1,
         "result": {
-            "content": [{"type": "text", "text": text}]
+            "content": [{"type": "text", "text": inner_text}]
         },
     }
+    return f"event: message\ndata: {json.dumps(payload)}\n\n"
+
+
+def make_mcp_error_sse(message: str) -> str:
+    """Return SSE-formatted MCP error response."""
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "error": {"code": -32000, "message": message},
+    }
+    return f"event: message\ndata: {json.dumps(payload)}\n\n"
+
+
+def mock_http_response(text: str, status_code: int = 200) -> MagicMock:
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.text = text
+    resp.raise_for_status = MagicMock()
+    return resp
 
 
 # ---- Tests ----
@@ -45,16 +65,12 @@ class TestGBrainMCPClient:
             {"slug": "email/2024-01-10/launch", "score": 0.87, "snippet": "Launch decision"},
             {"slug": "notion/2024-01-09/planning", "score": 0.75, "snippet": "Planning notes"},
         ]
-        response_body = make_mcp_response(mock_results)
+        sse_text = make_mcp_sse(mock_results)
 
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_http = AsyncMock()
             mock_client_cls.return_value.__aenter__.return_value = mock_http
-            mock_http.post.return_value = MagicMock(
-                status_code=200,
-                json=MagicMock(return_value=response_body),
-                raise_for_status=MagicMock(),
-            )
+            mock_http.post.return_value = mock_http_response(sse_text)
 
             results = await client.search("launch decision", limit=5)
 
@@ -65,16 +81,12 @@ class TestGBrainMCPClient:
     @pytest.mark.asyncio
     async def test_think_returns_string(self, client):
         answer = "Based on company records, the launch was decided on January 15th."
-        response_body = make_mcp_response({"answer": answer})
+        sse_text = make_mcp_sse({"answer": answer})
 
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_http = AsyncMock()
             mock_client_cls.return_value.__aenter__.return_value = mock_http
-            mock_http.post.return_value = MagicMock(
-                status_code=200,
-                json=MagicMock(return_value=response_body),
-                raise_for_status=MagicMock(),
-            )
+            mock_http.post.return_value = mock_http_response(sse_text)
 
             result = await client.think("When was the launch decided?")
 
@@ -82,17 +94,12 @@ class TestGBrainMCPClient:
 
     @pytest.mark.asyncio
     async def test_put_page_sends_correct_payload(self, client):
-        response_body = make_mcp_response({"slug": "gmail/2024-01-10/test", "status": "created"})
+        sse_text = make_mcp_sse({"slug": "gmail/2024-01-10/test", "status": "created"})
 
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_http = AsyncMock()
             mock_client_cls.return_value.__aenter__.return_value = mock_http
-            mock_response = MagicMock(
-                status_code=200,
-                json=MagicMock(return_value=response_body),
-                raise_for_status=MagicMock(),
-            )
-            mock_http.post.return_value = mock_response
+            mock_http.post.return_value = mock_http_response(sse_text)
 
             result = await client.put_page(
                 slug="gmail/2024-01-10/test",
@@ -108,20 +115,12 @@ class TestGBrainMCPClient:
 
     @pytest.mark.asyncio
     async def test_get_page_returns_none_when_not_found(self, client):
-        error_response = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "error": {"code": -32000, "message": "page not found"},
-        }
+        sse_text = make_mcp_error_sse("page not found")
 
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_http = AsyncMock()
             mock_client_cls.return_value.__aenter__.return_value = mock_http
-            mock_http.post.return_value = MagicMock(
-                status_code=200,
-                json=MagicMock(return_value=error_response),
-                raise_for_status=MagicMock(),
-            )
+            mock_http.post.return_value = mock_http_response(sse_text)
 
             result = await client.get_page("nonexistent/page")
 
@@ -129,7 +128,7 @@ class TestGBrainMCPClient:
 
     @pytest.mark.asyncio
     async def test_retry_on_timeout(self, client):
-        response_body = make_mcp_response([{"slug": "test", "score": 0.9}])
+        sse_text = make_mcp_sse([{"slug": "test", "score": 0.9}])
 
         call_count = 0
 
@@ -138,11 +137,7 @@ class TestGBrainMCPClient:
             call_count += 1
             if call_count < 2:
                 raise httpx.TimeoutException("Timeout", request=MagicMock())
-            return MagicMock(
-                status_code=200,
-                json=MagicMock(return_value=response_body),
-                raise_for_status=MagicMock(),
-            )
+            return mock_http_response(sse_text)
 
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_http = AsyncMock()
@@ -178,16 +173,12 @@ class TestGBrainMCPClient:
 
     @pytest.mark.asyncio
     async def test_bearer_token_sent_in_headers(self, client):
-        response_body = make_mcp_response([])
+        sse_text = make_mcp_sse([])
 
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_http = AsyncMock()
             mock_client_cls.return_value.__aenter__.return_value = mock_http
-            mock_http.post.return_value = MagicMock(
-                status_code=200,
-                json=MagicMock(return_value=response_body),
-                raise_for_status=MagicMock(),
-            )
+            mock_http.post.return_value = mock_http_response(sse_text)
 
             await client.search("test")
 
@@ -198,20 +189,12 @@ class TestGBrainMCPClient:
 
     @pytest.mark.asyncio
     async def test_tool_error_raises_runtime_error(self, client):
-        error_response = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "error": {"code": -32000, "message": "internal brain error"},
-        }
+        sse_text = make_mcp_error_sse("internal brain error")
 
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_http = AsyncMock()
             mock_client_cls.return_value.__aenter__.return_value = mock_http
-            mock_http.post.return_value = MagicMock(
-                status_code=200,
-                json=MagicMock(return_value=error_response),
-                raise_for_status=MagicMock(),
-            )
+            mock_http.post.return_value = mock_http_response(sse_text)
 
             with pytest.raises(RuntimeError, match="GBrain tool"):
                 await client.think("anything")

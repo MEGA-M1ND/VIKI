@@ -1,3 +1,4 @@
+import json
 import time
 from typing import Any
 
@@ -12,6 +13,19 @@ logger = structlog.get_logger(__name__)
 _RETRYABLE = (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError)
 
 
+def _parse_sse_body(text: str) -> Any:
+    """Parse MCP SSE response — extract JSON from 'data: {...}' lines."""
+    for line in text.splitlines():
+        if line.startswith("data:"):
+            raw = line[len("data:"):].strip()
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+    # Fallback: try parsing entire body as JSON
+    return json.loads(text)
+
+
 class GBrainMCPClient:
     def __init__(self, settings: Settings) -> None:
         self._base_url = settings.gbrain_mcp_url.rstrip("/")
@@ -19,7 +33,11 @@ class GBrainMCPClient:
         self._timeout = 30.0
 
     def _headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        headers = {
+            "Content-Type": "application/json",
+            # GBrain HTTP MCP requires both content types (SSE transport)
+            "Accept": "application/json, text/event-stream",
+        }
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"
         return headers
@@ -48,7 +66,11 @@ class GBrainMCPClient:
             response.raise_for_status()
 
         latency_ms = round((time.monotonic() - t0) * 1000)
-        data = response.json()
+
+        try:
+            data = _parse_sse_body(response.text)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"GBrain returned unparseable response: {exc}") from exc
 
         if "error" in data:
             logger.error(
@@ -66,8 +88,6 @@ class GBrainMCPClient:
         if content and isinstance(content, list):
             first = content[0]
             if first.get("type") == "text":
-                import json
-
                 try:
                     return json.loads(first["text"])
                 except (json.JSONDecodeError, KeyError):
@@ -75,13 +95,15 @@ class GBrainMCPClient:
         return result
 
     async def search(self, query: str, limit: int = 5) -> list[dict]:
-        result = await self._call_tool("brain_search", {"query": query, "limit": limit})
+        """Hybrid search using GBrain's 'query' tool (vector + BM25 + RRF)."""
+        result = await self._call_tool("query", {"query": query, "limit": limit})
         if isinstance(result, list):
             return result
         return result.get("results", []) if isinstance(result, dict) else []
 
     async def think(self, query: str) -> str:
-        result = await self._call_tool("brain_synthesize", {"query": query})
+        """Multi-hop synthesis via GBrain's 'think' tool."""
+        result = await self._call_tool("think", {"query": query})
         if isinstance(result, str):
             return result
         return result.get("answer", "") if isinstance(result, dict) else str(result)
@@ -103,7 +125,7 @@ class GBrainMCPClient:
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 base = self._base_url.replace("/mcp", "")
-                response = await client.get(f"{base}/health", headers=self._headers())
+                response = await client.get(f"{base}/health")
                 return response.status_code == 200
         except Exception as exc:
             logger.warning("gbrain.health_check_failed", error=str(exc))

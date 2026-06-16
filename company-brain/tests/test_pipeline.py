@@ -88,22 +88,20 @@ class TestClassifyNode:
         mock_response = MagicMock()
         mock_response.content = '{"worth_remembering": true, "confidence": 0.9, "reasoning": "Contains a launch decision."}'
 
+        chain_mock = MagicMock()
+        chain_mock.ainvoke = AsyncMock(return_value=mock_response)
+
         with patch("src.pipeline.nodes.get_settings") as mock_settings, \
-             patch("src.pipeline.nodes.ChatOpenAI") as mock_llm_cls:
+             patch("src.pipeline.nodes.ChatOpenAI") as mock_llm_cls, \
+             patch("src.pipeline.nodes.CLASSIFIER_PROMPT") as mock_prompt:
             mock_settings.return_value.classifier_confidence_threshold = 0.7
             mock_settings.return_value.openai_model = "gpt-4o"
             mock_settings.return_value.openai_api_key = "sk-test"
+            mock_llm_cls.return_value = MagicMock()
+            mock_prompt.__or__ = MagicMock(return_value=chain_mock)
 
-            mock_llm = MagicMock()
-            mock_llm_cls.return_value = mock_llm
-            chain_mock = AsyncMock(return_value=mock_response)
-            mock_llm.__or__ = MagicMock(return_value=chain_mock)
-
-            with patch("src.pipeline.nodes.CLASSIFIER_PROMPT") as mock_prompt:
-                mock_prompt.__or__ = MagicMock(return_value=chain_mock)
-
-                state = make_state()
-                result = await classify_node(state)
+            state = make_state()
+            result = await classify_node(state)
 
         assert result["is_worth_remembering"] is True
         assert result["confidence"] == 0.9
@@ -114,44 +112,42 @@ class TestClassifyNode:
         mock_response = MagicMock()
         mock_response.content = '{"worth_remembering": true, "confidence": 0.3, "reasoning": "Maybe."}'
 
+        chain_mock = MagicMock()
+        chain_mock.ainvoke = AsyncMock(return_value=mock_response)
+
         with patch("src.pipeline.nodes.get_settings") as mock_settings, \
-             patch("src.pipeline.nodes.ChatOpenAI") as mock_llm_cls:
+             patch("src.pipeline.nodes.ChatOpenAI") as mock_llm_cls, \
+             patch("src.pipeline.nodes.CLASSIFIER_PROMPT") as mock_prompt:
             mock_settings.return_value.classifier_confidence_threshold = 0.7
             mock_settings.return_value.openai_model = "gpt-4o"
             mock_settings.return_value.openai_api_key = "sk-test"
+            mock_llm_cls.return_value = MagicMock()
+            mock_prompt.__or__ = MagicMock(return_value=chain_mock)
 
-            chain_mock = AsyncMock(return_value=mock_response)
-            mock_llm = MagicMock()
-            mock_llm_cls.return_value = mock_llm
-
-            with patch("src.pipeline.nodes.CLASSIFIER_PROMPT") as mock_prompt:
-                mock_prompt.__or__ = MagicMock(return_value=chain_mock)
-
-                state = make_state()
-                result = await classify_node(state)
+            state = make_state()
+            result = await classify_node(state)
 
         assert result["is_worth_remembering"] is False
 
     @pytest.mark.asyncio
     async def test_classify_handles_llm_error(self):
+        chain_mock = MagicMock()
+        chain_mock.ainvoke = AsyncMock(side_effect=Exception("LLM unavailable"))
+
         with patch("src.pipeline.nodes.get_settings") as mock_settings, \
-             patch("src.pipeline.nodes.ChatOpenAI") as mock_llm_cls:
+             patch("src.pipeline.nodes.ChatOpenAI") as mock_llm_cls, \
+             patch("src.pipeline.nodes.CLASSIFIER_PROMPT") as mock_prompt:
             mock_settings.return_value.classifier_confidence_threshold = 0.7
             mock_settings.return_value.openai_model = "gpt-4o"
             mock_settings.return_value.openai_api_key = "sk-test"
+            mock_llm_cls.return_value = MagicMock()
+            mock_prompt.__or__ = MagicMock(return_value=chain_mock)
 
-            chain_mock = AsyncMock(side_effect=Exception("LLM unavailable"))
-            mock_llm = MagicMock()
-            mock_llm_cls.return_value = mock_llm
-
-            with patch("src.pipeline.nodes.CLASSIFIER_PROMPT") as mock_prompt:
-                mock_prompt.__or__ = MagicMock(return_value=chain_mock)
-
-                state = make_state()
-                result = await classify_node(state)
+            state = make_state()
+            result = await classify_node(state)
 
         assert result["is_worth_remembering"] is False
-        assert result["error"] is None  # error field not set in classify, just returns safe default
+        assert result["error"] is None
 
 
 # ---- Extract node tests ----
@@ -170,20 +166,19 @@ class TestExtractNode:
             "key_facts": ["Launch date: January 15", "Alice leads rollout"]
         }"""
 
+        chain_mock = MagicMock()
+        chain_mock.ainvoke = AsyncMock(return_value=mock_response)
+
         with patch("src.pipeline.nodes.get_settings") as mock_settings, \
-             patch("src.pipeline.nodes.ChatOpenAI") as mock_llm_cls:
+             patch("src.pipeline.nodes.ChatOpenAI") as mock_llm_cls, \
+             patch("src.pipeline.nodes.EXTRACTOR_PROMPT") as mock_prompt:
             mock_settings.return_value.openai_model = "gpt-4o"
             mock_settings.return_value.openai_api_key = "sk-test"
+            mock_llm_cls.return_value = MagicMock()
+            mock_prompt.__or__ = MagicMock(return_value=chain_mock)
 
-            chain_mock = AsyncMock(return_value=mock_response)
-            mock_llm = MagicMock()
-            mock_llm_cls.return_value = mock_llm
-
-            with patch("src.pipeline.nodes.EXTRACTOR_PROMPT") as mock_prompt:
-                mock_prompt.__or__ = MagicMock(return_value=chain_mock)
-
-                state = make_state(is_worth_remembering=True, confidence=0.85)
-                result = await extract_node(state)
+            state = make_state(is_worth_remembering=True, confidence=0.85)
+            result = await extract_node(state)
 
         assert result["summary"] == "The team decided to launch on Jan 15. Alice leads rollout."
         assert len(result["entities"]) == 2
@@ -346,21 +341,20 @@ class TestExtractionGraph:
         classify_response = MagicMock()
         classify_response.content = '{"worth_remembering": false, "confidence": 0.95, "reasoning": "Automated status update."}'
 
+        classify_chain = MagicMock()
+        classify_chain.ainvoke = AsyncMock(return_value=classify_response)
+
         with patch("src.pipeline.nodes.get_settings") as mock_settings, \
-             patch("src.pipeline.nodes.ChatOpenAI") as mock_llm_cls:
+             patch("src.pipeline.nodes.ChatOpenAI") as mock_llm_cls, \
+             patch("src.pipeline.nodes.CLASSIFIER_PROMPT") as mock_prompt:
             mock_settings.return_value.classifier_confidence_threshold = 0.7
             mock_settings.return_value.openai_model = "gpt-4o"
             mock_settings.return_value.openai_api_key = "sk-test"
+            mock_llm_cls.return_value = MagicMock()
+            mock_prompt.__or__ = MagicMock(return_value=classify_chain)
 
-            chain_mock = AsyncMock(return_value=classify_response)
-            mock_llm = MagicMock()
-            mock_llm_cls.return_value = mock_llm
-
-            with patch("src.pipeline.nodes.CLASSIFIER_PROMPT") as mock_prompt:
-                mock_prompt.__or__ = MagicMock(return_value=chain_mock)
-
-                initial = make_state()
-                result = await graph.ainvoke(initial)
+            initial = make_state()
+            result = await graph.ainvoke(initial)
 
         assert result["is_worth_remembering"] is False
         assert result["write_status"] is None
@@ -374,35 +368,29 @@ class TestExtractionGraph:
         extract_resp = MagicMock()
         extract_resp.content = '{"summary": "Summary here.", "entities": [], "key_facts": ["fact1"]}'
 
-        call_count = 0
-
-        async def side_effect(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            return classify_resp if call_count == 1 else extract_resp
+        classify_chain = MagicMock()
+        classify_chain.ainvoke = AsyncMock(return_value=classify_resp)
+        extract_chain = MagicMock()
+        extract_chain.ainvoke = AsyncMock(return_value=extract_resp)
 
         with patch("src.pipeline.nodes.get_settings") as mock_settings, \
              patch("src.pipeline.nodes.ChatOpenAI") as mock_llm_cls, \
-             patch("src.pipeline.nodes.GBrainMCPClient") as mock_client_cls:
+             patch("src.pipeline.nodes.GBrainMCPClient") as mock_client_cls, \
+             patch("src.pipeline.nodes.CLASSIFIER_PROMPT") as cp, \
+             patch("src.pipeline.nodes.EXTRACTOR_PROMPT") as ep:
             mock_settings.return_value.classifier_confidence_threshold = 0.7
             mock_settings.return_value.openai_model = "gpt-4o"
             mock_settings.return_value.openai_api_key = "sk-test"
-
-            chain_mock = AsyncMock(side_effect=side_effect)
-            mock_llm = MagicMock()
-            mock_llm_cls.return_value = mock_llm
+            mock_llm_cls.return_value = MagicMock()
+            cp.__or__ = MagicMock(return_value=classify_chain)
+            ep.__or__ = MagicMock(return_value=extract_chain)
 
             mock_client = AsyncMock()
             mock_client.search.return_value = [{"slug": "existing/page", "score": 0.95}]
             mock_client_cls.return_value = mock_client
 
-            with patch("src.pipeline.nodes.CLASSIFIER_PROMPT") as cp, \
-                 patch("src.pipeline.nodes.EXTRACTOR_PROMPT") as ep:
-                cp.__or__ = MagicMock(return_value=chain_mock)
-                ep.__or__ = MagicMock(return_value=chain_mock)
-
-                initial = make_state()
-                result = await graph.ainvoke(initial)
+            initial = make_state()
+            result = await graph.ainvoke(initial)
 
         assert result["is_duplicate"] is True
         assert result["write_status"] is None
