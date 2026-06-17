@@ -34,7 +34,7 @@ def build_ingestion_graph(extractor: BaseExtractor, store: MemoryStore) -> Compi
         A compiled LangGraph runnable accepting/returning :class:`IngestionState`.
     """
 
-    async def extract_node(state: IngestionState) -> IngestionState:
+    async def extract_node(state: IngestionState) -> dict:
         document = state["document"]
         try:
             facts = await extractor.extract(document)
@@ -44,7 +44,7 @@ def build_ingestion_graph(extractor: BaseExtractor, store: MemoryStore) -> Compi
         logger.info("ingest.extracted", doc_id=document.id, facts=len(facts))
         return {**state, "facts": facts}
 
-    async def persist_node(state: IngestionState) -> IngestionState:
+    async def persist_node(state: IngestionState) -> dict:
         facts = state.get("facts") or []
         records: list[MemoryRecord] = []
         for fact in facts:

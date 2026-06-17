@@ -84,12 +84,36 @@ class Settings(BaseSettings):
     notion_api_key: str = Field(default="", description="Notion integration token.")
     slack_bot_token: str = Field(default="", description="Slack bot token.")
 
+    # --- Connectors (credentials) --------------------------------------------
+    notion_token: str = Field(default="", description="Notion integration token (alternate key).")
+    notion_database_ids: str = Field(
+        default="", description="Comma-separated Notion database IDs to sync."
+    )
+
     # --- Ingestion -----------------------------------------------------------
     ingestion_lookback_hours: int = Field(
         default=24, description="Default look-back window for incremental ingestion."
     )
     ingestion_batch_size: int = Field(
         default=50, description="Max documents processed per ingestion batch."
+    )
+    ingestion_schedule_minutes: int = Field(
+        default=30, description="How often the scheduler triggers a full ingest (minutes)."
+    )
+    health_check_schedule_minutes: int = Field(
+        default=5, description="How often the scheduler checks connector health (minutes)."
+    )
+
+    # --- Retrieval -----------------------------------------------------------
+    retrieval_default_limit: int = Field(
+        default=5, description="Default number of results returned per retrieval query."
+    )
+    retrieval_max_limit: int = Field(
+        default=50, description="Hard cap on retrieval results."
+    )
+    classifier_confidence_threshold: float = Field(
+        default=0.5,
+        description="Minimum classifier confidence required to proceed with extraction.",
     )
 
     @property

@@ -61,6 +61,13 @@ class ConnectorRateLimitError(ConnectorError):
     """The source rejected a request due to rate limiting."""
 
 
+class ConnectorSyncError(ConnectorError):
+    """A sync run across multiple documents partially or fully failed.
+
+    ``details`` typically includes ``fetched``, ``failed``, and ``errors`` keys.
+    """
+
+
 # --- Pipeline stages ---------------------------------------------------------
 
 
@@ -81,6 +88,14 @@ class MemoryError(CompanyBrainError):
 
 class MemoryWriteError(MemoryError):
     """Writing a record to the memory store failed."""
+
+
+class WriteFailureError(MemoryWriteError):
+    """A fact could not be written and was routed to the dead-letter queue.
+
+    ``details`` typically includes ``fact_id`` and ``destination`` (path of the
+    dead-letter file).
+    """
 
 
 class MemoryQueryError(MemoryError):

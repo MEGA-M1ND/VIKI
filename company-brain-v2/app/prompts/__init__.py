@@ -1,6 +1,6 @@
-"""Prompt templates for LLM-backed stages.
+"""Prompt templates for LLM-backed pipeline stages."""
 
-Intentionally empty in the MVP scaffold. Extraction and synthesis prompts will
-live here as versioned constants/templates, kept separate from orchestration
-(``app.graphs``) and business logic (``app.services``).
-"""
+from app.prompts.classification import build_classify_messages
+from app.prompts.extraction import build_extract_messages
+
+__all__ = ["build_classify_messages", "build_extract_messages"]

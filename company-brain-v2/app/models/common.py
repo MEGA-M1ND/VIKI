@@ -52,3 +52,11 @@ class EntityType(StrEnum):
     PROJECT = "project"
     CONCEPT = "concept"
     OTHER = "other"
+
+
+class ValidityKind(StrEnum):
+    """Temporal validity of an extracted fact."""
+
+    CURRENT = "current"        # Still believed to be true today
+    HISTORICAL = "historical"  # Was true, may have changed
+    TENTATIVE = "tentative"    # Uncertain, predicted, or speculative

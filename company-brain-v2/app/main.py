@@ -13,9 +13,13 @@ import uvicorn
 from fastapi import FastAPI
 
 from app.api.errors import register_exception_handlers
+from app.api.routes_context import router as context_router
 from app.api.routes_health import router as health_router
+from app.api.routes_ingest import router as ingest_router
+from app.api.routes_memory import router as memory_router
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
+from app.scheduler.cron import Scheduler
 from app.services.container import ServiceContainer
 
 logger = get_logger(__name__)
@@ -25,11 +29,22 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Build collaborators on startup; release them on shutdown."""
     settings: Settings = get_settings()
-    app.state.container = ServiceContainer.build(settings)
+    container = ServiceContainer.build(settings)
+    app.state.container = container
+
+    scheduler = Scheduler(
+        container,
+        ingest_interval_minutes=settings.ingestion_schedule_minutes,
+        health_interval_minutes=settings.health_check_schedule_minutes,
+    )
+    scheduler.start()
+    app.state.scheduler = scheduler
+
     logger.info("app.startup", env=settings.app_env, name=settings.app_name)
     try:
         yield
     finally:
+        scheduler.stop()
         logger.info("app.shutdown")
 
 
@@ -54,6 +69,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     register_exception_handlers(app)
     app.include_router(health_router)
+    app.include_router(ingest_router)
+    app.include_router(context_router)
+    app.include_router(memory_router)
 
     return app
 
