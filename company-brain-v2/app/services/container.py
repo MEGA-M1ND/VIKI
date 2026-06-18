@@ -53,14 +53,37 @@ class ServiceContainer:
             default_limit=settings.retrieval_default_limit,
             max_limit=settings.retrieval_max_limit,
         )
+
+        connectors: list[BaseConnector] = []
+        if settings.gmail_client_id and settings.gmail_client_secret:
+            from app.connectors.gmail import GmailConnector
+            connectors.append(
+                GmailConnector(
+                    client_id=settings.gmail_client_id,
+                    client_secret=settings.gmail_client_secret,
+                )
+            )
+
+        notion_token = settings.notion_api_key or settings.notion_token
+        notion_db_ids = [i.strip() for i in settings.notion_database_ids.split(",") if i.strip()]
+        if notion_token and notion_db_ids:
+            from app.connectors.notion import NotionConnector
+            connectors.append(NotionConnector(token=notion_token, database_ids=notion_db_ids))
+
+        from app.ingestion.passthrough import PassthroughExtractor
+        extractor: BaseExtractor = PassthroughExtractor()
+
         logger.info(
             "container.built",
             env=settings.app_env,
             memory_backend=settings.memory_backend,
+            connectors=[type(c).__name__ for c in connectors],
         )
         return cls(
             settings=settings,
             memory_store=store,
             context_provider=provider,
             retrieval_service=retrieval,
+            connectors=connectors,
+            extractor=extractor,
         )
