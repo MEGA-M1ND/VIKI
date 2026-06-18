@@ -23,6 +23,40 @@ from app.memory.base import MemoryStore
 from app.memory.factory import build_memory_store
 from app.services.retrieval import RetrievalService
 
+
+def _build_extractor(settings: Settings) -> BaseExtractor | None:
+    if not settings.llm_api_key:
+        return None
+    if settings.llm_provider == "openai":
+        from app.llm.openai import OpenAIProvider
+        from app.ingestion.llm_extractor import LLMExtractor
+        return LLMExtractor(OpenAIProvider(model=settings.llm_model, api_key=settings.llm_api_key))
+    return None
+
+
+def _build_connectors(settings: Settings) -> list[BaseConnector]:
+    connectors: list[BaseConnector] = []
+
+    if settings.gmail_client_id and settings.gmail_client_secret:
+        from app.connectors.gmail import GmailConnector
+        connectors.append(
+            GmailConnector(
+                client_id=settings.gmail_client_id,
+                client_secret=settings.gmail_client_secret,
+            )
+        )
+
+    if settings.notion_token or settings.notion_api_key:
+        from app.connectors.notion import NotionConnector
+        connectors.append(
+            NotionConnector(
+                token=settings.notion_token or settings.notion_api_key,
+                database_ids=[d.strip() for d in settings.notion_database_ids.split(",") if d.strip()],
+            )
+        )
+
+    return connectors
+
 logger = get_logger(__name__)
 
 
@@ -53,14 +87,20 @@ class ServiceContainer:
             default_limit=settings.retrieval_default_limit,
             max_limit=settings.retrieval_max_limit,
         )
+        connectors = _build_connectors(settings)
+        extractor = _build_extractor(settings)
         logger.info(
             "container.built",
             env=settings.app_env,
             memory_backend=settings.memory_backend,
+            connectors=[type(c).__name__ for c in connectors],
+            extractor=type(extractor).__name__ if extractor else None,
         )
         return cls(
             settings=settings,
             memory_store=store,
             context_provider=provider,
             retrieval_service=retrieval,
+            connectors=connectors,
+            extractor=extractor,
         )
