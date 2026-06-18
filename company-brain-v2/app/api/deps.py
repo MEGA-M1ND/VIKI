@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from fastapi import Request
 
+from app.llm.base import LLMProvider
 from app.services.container import ServiceContainer
 from app.services.health import HealthService
 
@@ -20,3 +21,8 @@ def get_container(request: Request) -> ServiceContainer:
 def get_health_service(request: Request) -> HealthService:
     """Return a :class:`HealthService` bound to the current container."""
     return HealthService(get_container(request))
+
+
+def get_llm_provider(request: Request) -> LLMProvider | None:
+    """Return the configured LLM provider, or None if not wired."""
+    return get_container(request).llm

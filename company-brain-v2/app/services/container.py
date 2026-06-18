@@ -19,6 +19,7 @@ from app.context.provider import MemoryContextProvider
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 from app.ingestion.base import BaseExtractor
+from app.llm.base import LLMProvider
 from app.memory.base import MemoryStore
 from app.memory.factory import build_memory_store
 from app.services.retrieval import RetrievalService
@@ -36,6 +37,7 @@ class ServiceContainer:
     retrieval_service: RetrievalService
     connectors: list[BaseConnector] = field(default_factory=list)
     extractor: BaseExtractor | None = None
+    llm: LLMProvider | None = None
 
     @classmethod
     def build(cls, settings: Settings | None = None) -> ServiceContainer:
@@ -73,11 +75,17 @@ class ServiceContainer:
         from app.ingestion.passthrough import PassthroughExtractor
         extractor: BaseExtractor = PassthroughExtractor()
 
+        llm: LLMProvider | None = None
+        if settings.llm_api_key:
+            from app.llm.openai import OpenAIProvider
+            llm = OpenAIProvider(model=settings.llm_model, api_key=settings.llm_api_key)
+
         logger.info(
             "container.built",
             env=settings.app_env,
             memory_backend=settings.memory_backend,
             connectors=[type(c).__name__ for c in connectors],
+            llm_configured=llm is not None,
         )
         return cls(
             settings=settings,
@@ -86,4 +94,5 @@ class ServiceContainer:
             retrieval_service=retrieval,
             connectors=connectors,
             extractor=extractor,
+            llm=llm,
         )
