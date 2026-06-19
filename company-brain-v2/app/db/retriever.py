@@ -89,17 +89,21 @@ class HybridRetriever:
             LIMIT :top_n
         """)
 
+        # websearch_to_tsquery (vs plainto_tsquery) defaults unquoted terms to OR,
+        # not AND — so a query like "founder raising seed funding" still matches
+        # docs missing "funding". It also supports quoted phrases ("seed round"),
+        # explicit OR, and negation (-newsletter). This materially improves recall.
         bm25_sql = text(f"""
             SELECT
                 id,
                 ROW_NUMBER() OVER (
-                    ORDER BY ts_rank(ts_content, plainto_tsquery('english', :tsquery)) DESC
+                    ORDER BY ts_rank(ts_content, websearch_to_tsquery('english', :tsquery)) DESC
                 ) - 1 AS rank
             FROM memory_records
             WHERE tenant_id = :tenant_id
-              AND ts_content @@ plainto_tsquery('english', :tsquery)
+              AND ts_content @@ websearch_to_tsquery('english', :tsquery)
               {extra_conditions}
-            ORDER BY ts_rank(ts_content, plainto_tsquery('english', :tsquery)) DESC
+            ORDER BY ts_rank(ts_content, websearch_to_tsquery('english', :tsquery)) DESC
             LIMIT :top_n
         """)
 
