@@ -21,7 +21,7 @@ from app.llm.base import LLMProvider
 from app.memory.base import MemoryStore
 from app.models.common import FactType, SourceType
 from app.models.memory import MemoryRecord
-from app.models.retrieval import RetrievalQuery, RetrievalResult, ScoredFact
+from app.models.retrieval import RetrievalQuery, RetrievalResult
 from app.utils.ids import utcnow
 
 logger = get_logger(__name__)

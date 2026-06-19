@@ -1,8 +1,6 @@
 """Tests for source-level deduplication."""
 from __future__ import annotations
 
-import pytest
-
 from app.core.dedup import deduplicate_by_source
 from app.models.common import FactType
 from app.models.memory import MemoryRecord

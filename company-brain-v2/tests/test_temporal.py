@@ -1,9 +1,7 @@
 """Tests for temporal query parsing."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
-import pytest
+from datetime import UTC, datetime
 
 from app.core.temporal import extract_temporal_constraint
 
@@ -20,7 +18,7 @@ def test_recently_14_days() -> None:
     """'recently' should return a ~14-day cutoff."""
     cleaned, after = extract_temporal_constraint("who contacted me recently")
     assert after is not None
-    delta = datetime.now(tz=timezone.utc) - after
+    delta = datetime.now(tz=UTC) - after
     assert 13 <= delta.days <= 15  # ~14 days
 
 
@@ -28,7 +26,7 @@ def test_last_week_7_days() -> None:
     """'last week' should return a ~7-day cutoff."""
     cleaned, after = extract_temporal_constraint("emails from last week")
     assert after is not None
-    delta = datetime.now(tz=timezone.utc) - after
+    delta = datetime.now(tz=UTC) - after
     assert 6 <= delta.days <= 8
 
 
@@ -36,7 +34,7 @@ def test_this_week() -> None:
     """'this week' should return a ~7-day cutoff."""
     cleaned, after = extract_temporal_constraint("meetings this week")
     assert after is not None
-    delta = datetime.now(tz=timezone.utc) - after
+    delta = datetime.now(tz=UTC) - after
     assert 6 <= delta.days <= 8
 
 
@@ -44,7 +42,7 @@ def test_yesterday_1_day() -> None:
     """'yesterday' should return a ~1-day cutoff."""
     cleaned, after = extract_temporal_constraint("what happened yesterday")
     assert after is not None
-    delta = datetime.now(tz=timezone.utc) - after
+    delta = datetime.now(tz=UTC) - after
     assert 0 <= delta.days <= 2
 
 
@@ -52,7 +50,7 @@ def test_last_month_30_days() -> None:
     """'last month' should return a ~30-day cutoff."""
     cleaned, after = extract_temporal_constraint("meetings last month")
     assert after is not None
-    delta = datetime.now(tz=timezone.utc) - after
+    delta = datetime.now(tz=UTC) - after
     assert 29 <= delta.days <= 31
 
 
@@ -60,7 +58,7 @@ def test_this_month() -> None:
     """'this month' should return a ~30-day cutoff."""
     cleaned, after = extract_temporal_constraint("emails this month")
     assert after is not None
-    delta = datetime.now(tz=timezone.utc) - after
+    delta = datetime.now(tz=UTC) - after
     assert 29 <= delta.days <= 31
 
 
@@ -68,7 +66,7 @@ def test_last_year_365_days() -> None:
     """'last year' should return a ~365-day cutoff."""
     cleaned, after = extract_temporal_constraint("investments last year")
     assert after is not None
-    delta = datetime.now(tz=timezone.utc) - after
+    delta = datetime.now(tz=UTC) - after
     assert 364 <= delta.days <= 366
 
 
@@ -119,7 +117,7 @@ def test_this_year() -> None:
     """'this year' should return a ~365-day cutoff."""
     cleaned, after = extract_temporal_constraint("what happened this year")
     assert after is not None
-    delta = datetime.now(tz=timezone.utc) - after
+    delta = datetime.now(tz=UTC) - after
     assert 364 <= delta.days <= 366
 
 
@@ -127,5 +125,5 @@ def test_recent_14_days() -> None:
     """'recent' (without 'ly') should return a ~14-day cutoff."""
     cleaned, after = extract_temporal_constraint("show recent activity")
     assert after is not None
-    delta = datetime.now(tz=timezone.utc) - after
+    delta = datetime.now(tz=UTC) - after
     assert 13 <= delta.days <= 15

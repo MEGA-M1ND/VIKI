@@ -83,7 +83,7 @@ class CrossEncoderReranker:
             return facts[:top_k]
 
         scored = sorted(
-            zip(scores, facts),
+            zip(scores, facts, strict=True),
             key=lambda t: t[0],
             reverse=True,
         )

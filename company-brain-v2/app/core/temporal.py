@@ -7,7 +7,7 @@ after_date cutoff for filtering retrieval results by created_at.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 # Ordered longest-match-first so "last week" beats "week".
 TEMPORAL_PATTERNS: list[tuple[str, timedelta]] = [
@@ -44,7 +44,7 @@ def extract_temporal_constraint(query: str) -> tuple[str, datetime | None]:
         >>> extract_temporal_constraint("tell me about Alice")
         ("tell me about Alice", None)
     """
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
 
     for phrase, delta in TEMPORAL_PATTERNS:
         pattern = re.compile(re.escape(phrase), re.IGNORECASE)
