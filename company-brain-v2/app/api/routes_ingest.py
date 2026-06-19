@@ -1,7 +1,8 @@
 """Ingestion API routes.
 
-POST /ingest/run  — trigger an ingestion run for a source
-GET  /ingest/status — describe the last run's stats (in-memory only)
+POST /ingest/run      — trigger an ingestion run for a source
+POST /ingest/document — directly ingest a single document (for testing and direct API use)
+GET  /ingest/status   — describe the last run's stats (in-memory only)
 """
 
 from __future__ import annotations
@@ -64,7 +65,13 @@ async def run_ingest(
             detail="No extractor is configured.",
         )
 
-    orch = IngestionOrchestrator(connector, extractor, container.memory_store)
+    orch = IngestionOrchestrator(
+        connector,
+        extractor,
+        container.memory_store,
+        llm=container.llm,
+        vc_repo=container.vc_repository,
+    )
     stats = await orch.run(
         tenant_id=container.settings.default_tenant_id,
         lookback_hours=req.lookback_hours,
@@ -101,6 +108,59 @@ async def ingest_status() -> dict[str, IngestRunResponse]:
         )
         for src, s in _last_stats.items()
     }
+
+
+class IngestDocumentRequest(BaseModel):
+    """Request body for directly ingesting a single document."""
+
+    content: str = Field(..., description="Document content.")
+    source: SourceType = Field(default=SourceType.GMAIL, description="Source type.")
+    title: str | None = Field(default=None, description="Optional title.")
+    author: str | None = Field(default=None, description="Optional author.")
+    tenant_id: str = Field(default="default", description="Owning tenant.")
+    metadata: dict = Field(default_factory=dict, description="Optional metadata.")
+
+
+@router.post("/document", response_model=dict, status_code=status.HTTP_200_OK)
+async def ingest_document(
+    req: IngestDocumentRequest,
+    container: ServiceContainer = Depends(get_container),
+) -> dict:
+    """Directly ingest a single document (for testing and direct API use).
+
+    Runs the full extraction graph plus an optional VC extraction pass if
+    an LLM and VC repository are configured.
+    """
+    from app.ingestion.orchestrator import IngestionOrchestrator
+    from app.models.documents import RawDocument
+    from app.utils.ids import new_id
+
+    extractor = container.extractor
+    if extractor is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No extractor is configured.",
+        )
+
+    doc = RawDocument(
+        tenant_id=req.tenant_id,
+        source=req.source,
+        source_id=new_id("direct"),
+        content=req.content,
+        title=req.title,
+        author=req.author,
+        metadata=req.metadata,
+    )
+    orch = IngestionOrchestrator(
+        connector=None,
+        extractor=extractor,
+        store=container.memory_store,
+        llm=container.llm,
+        vc_repo=container.vc_repository,
+    )
+    result = await orch.ingest_single(doc)
+    logger.info("api.ingest_document", doc_id=doc.id, **result)
+    return {"doc_id": doc.id, "status": "ingested", **result}
 
 
 def _get_connector(source: SourceType, container: ServiceContainer) -> BaseConnector | None:

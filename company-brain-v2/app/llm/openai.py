@@ -67,3 +67,32 @@ class OpenAIProvider(LLMProvider):
             return str(response.content)
         except Exception as exc:
             raise ExtractionError("OpenAI call failed", details={"error": str(exc)}) from exc
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        """Generate embedding vectors using text-embedding-3-small.
+
+        Args:
+            texts: Input strings to embed.
+
+        Returns:
+            List of float vectors (1536 dimensions each).
+
+        Raises:
+            ExtractionError: The embedding call failed.
+        """
+        try:
+            from langchain_openai import OpenAIEmbeddings
+        except ImportError as exc:
+            raise ExtractionError(
+                "langchain-openai is required for embedding",
+                details={"install": "pip install langchain-openai"},
+            ) from exc
+
+        client = OpenAIEmbeddings(
+            model="text-embedding-3-small",
+            api_key=self._api_key,
+        )
+        try:
+            return await client.aembed_documents(texts)
+        except Exception as exc:
+            raise ExtractionError("OpenAI embed failed", details={"error": str(exc)}) from exc

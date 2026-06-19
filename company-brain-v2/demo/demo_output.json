@@ -1,0 +1,167 @@
+{
+  "run_at": "2026-06-19T14:03:15.691311+00:00",
+  "tenant": "demo",
+  "queries_run": 5,
+  "results": [
+    {
+      "query_id": "job_outreach",
+      "label": "Job Outreach (last 30d)",
+      "query": "which companies approached me for a job lately",
+      "hit_count": 5,
+      "top_result": "Acme Corp hiring manager approached me for a job as Engineering Manager",
+      "score": 0.714,
+      "source": "gmail_direct_outreach",
+      "age_days": 7,
+      "llm_answer": "Google, Stripe, and Acme Corp reached out about engineering roles.",
+      "all_results": [
+        {
+          "top_result": "Acme Corp hiring manager approached me for a job as Engineering Manager",
+          "score": 0.714,
+          "source": "gmail_direct_outreach",
+          "age_days": 7
+        },
+        {
+          "top_result": "Google recruiter approached me about a Staff Engineer job opportunity",
+          "score": 0.571,
+          "source": "gmail_direct_outreach",
+          "age_days": 15
+        },
+        {
+          "top_result": "Alice Chen from Acme AI is raising a $2M seed round. She reached out asking for an intro t",
+          "score": 0.343,
+          "source": "unknown",
+          "age_days": 5
+        },
+        {
+          "top_result": "Bob from DataStream followed up on our meeting. He sent over the term sheet for review.",
+          "score": 0.343,
+          "source": "unknown",
+          "age_days": 1
+        },
+        {
+          "top_result": "Acme AI pitch deck arrived. They are targeting Series A next year but doing a seed bridge ",
+          "score": 0.229,
+          "source": "unknown",
+          "age_days": 7
+        }
+      ]
+    },
+    {
+      "query_id": "founders_raising",
+      "label": "Founders Raising Seed",
+      "query": "founders raising seed round right now",
+      "hit_count": 2,
+      "top_result": "Alice Chen from Acme AI is raising a $2M seed round. She reached out asking for an intro t",
+      "score": 0.4,
+      "source": "unknown",
+      "age_days": 5,
+      "llm_answer": "Alice Chen at Acme AI is actively raising a $2M seed round.",
+      "all_results": [
+        {
+          "top_result": "Alice Chen from Acme AI is raising a $2M seed round. She reached out asking for an intro t",
+          "score": 0.4,
+          "source": "unknown",
+          "age_days": 5
+        },
+        {
+          "top_result": "Acme AI pitch deck arrived. They are targeting Series A next year but doing a seed bridge ",
+          "score": 0.267,
+          "source": "unknown",
+          "age_days": 7
+        }
+      ]
+    },
+    {
+      "query_id": "followup_week",
+      "label": "Follow-ups This Week",
+      "query": "who followed up with me this week",
+      "hit_count": 3,
+      "top_result": "Bob from DataStream followed up on our meeting. He sent over the term sheet for review.",
+      "score": 0.48,
+      "source": "unknown",
+      "age_days": 1,
+      "llm_answer": "Alice Chen at Acme AI is actively raising a $2M seed round.",
+      "all_results": [
+        {
+          "top_result": "Bob from DataStream followed up on our meeting. He sent over the term sheet for review.",
+          "score": 0.48,
+          "source": "unknown",
+          "age_days": 1
+        },
+        {
+          "top_result": "Carol followed up about the partnership discussion. She wants to reconnect this week.",
+          "score": 0.32,
+          "source": "unknown",
+          "age_days": 2
+        },
+        {
+          "top_result": "Alice Chen from Acme AI is raising a $2M seed round. She reached out asking for an intro t",
+          "score": 0.16,
+          "source": "unknown",
+          "age_days": 5
+        }
+      ]
+    },
+    {
+      "query_id": "alice_fundraise",
+      "label": "Alice Chen Signals",
+      "query": "what did Alice Chen say about her fundraise",
+      "hit_count": 5,
+      "top_result": "Alice Chen from Acme AI is raising a $2M seed round. She reached out asking for an intro t",
+      "score": 0.2,
+      "source": "unknown",
+      "age_days": 5,
+      "llm_answer": "Google, Stripe, and Acme Corp reached out about engineering roles.",
+      "all_results": [
+        {
+          "top_result": "Alice Chen from Acme AI is raising a $2M seed round. She reached out asking for an intro t",
+          "score": 0.2,
+          "source": "unknown",
+          "age_days": 5
+        },
+        {
+          "top_result": "Google recruiter approached me about a Staff Engineer job opportunity",
+          "score": 0.125,
+          "source": "gmail_direct_outreach",
+          "age_days": 15
+        },
+        {
+          "top_result": "Stripe recruiter contacted me about a job opening for Senior Engineer",
+          "score": 0.125,
+          "source": "gmail_direct_outreach",
+          "age_days": 30
+        },
+        {
+          "top_result": "Old recruiter email from Microsoft about SDE role",
+          "score": 0.125,
+          "source": "gmail_direct_outreach",
+          "age_days": 120
+        },
+        {
+          "top_result": "Carol followed up about the partnership discussion. She wants to reconnect this week.",
+          "score": 0.1,
+          "source": "unknown",
+          "age_days": 2
+        }
+      ]
+    },
+    {
+      "query_id": "fintech_deals",
+      "label": "VC Fintech Founders",
+      "query": "show me warm deals in fintech",
+      "hit_count": 1,
+      "top_result": "Bob Rao @ FinStack [pre-seed]",
+      "score": 0.295,
+      "source": "vc_table",
+      "age_days": 45,
+      "all_results": [
+        {
+          "top_result": "Bob Rao @ FinStack [pre-seed]",
+          "score": 0.295,
+          "source": "vc_table",
+          "age_days": 45
+        }
+      ]
+    }
+  ]
+}
