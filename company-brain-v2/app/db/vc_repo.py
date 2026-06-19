@@ -16,6 +16,7 @@ from datetime import datetime
 from uuid import UUID
 
 from app.models.vc import DealOpportunity, FounderProfile, FundSignal
+from app.utils.ids import utcnow
 
 
 class VCRepository(ABC):
@@ -83,6 +84,61 @@ class VCRepository(ABC):
         """List signals for a tenant, sorted by signal_date DESC.
 
         Optional filters: founder_id (==), since (signal_date >=).
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def upsert_founder_from_signal(
+        self, *, tenant_id: str, vc_fact: dict, source_doc_id: str
+    ) -> FounderProfile:
+        """Create or update a FounderProfile from a parsed VC extraction fact dict.
+
+        Matches on (tenant_id, company_name). If not found, creates a new profile
+        with full_name from entities.person, company_name from entities.company,
+        stage from entities.stage (default "idea"), domain="" initially, location="",
+        last_contact_date = signal_date or now, raw_signals=[fact.statement],
+        source_doc_ids=[source_doc_id].
+
+        If found, appends fact.statement to raw_signals (if not already present),
+        updates last_contact_date if signal_date is more recent, appends source_doc_id
+        to source_doc_ids if not present.
+
+        Args:
+            tenant_id: Owning tenant.
+            vc_fact: A parsed VC extraction fact dict with keys: fact_type,
+                statement, entities (dict), confidence, signal_date.
+            source_doc_id: The source document id to associate.
+
+        Returns:
+            The inserted or updated :class:`FounderProfile`.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_signals_for_founder(
+        self, *, tenant_id: str, founder_id: UUID
+    ) -> list[FundSignal]:
+        """Return all signals for this founder, sorted by signal_date desc.
+
+        Args:
+            tenant_id: Owning tenant.
+            founder_id: The founder whose signals to retrieve.
+
+        Returns:
+            List of :class:`FundSignal` sorted by signal_date descending.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def update_founder_score(
+        self, *, tenant_id: str, founder_id: UUID, score: float
+    ) -> None:
+        """Update signal_score on a FounderProfile.
+
+        Args:
+            tenant_id: Owning tenant.
+            founder_id: The founder to update.
+            score: The new signal score in [0, 1].
         """
         raise NotImplementedError
 
@@ -166,3 +222,97 @@ class InMemoryVCRepository(VCRepository):
             items = [s for s in items if s.signal_date >= since]
         items.sort(key=lambda s: s.signal_date, reverse=True)
         return items
+
+    async def upsert_founder_from_signal(
+        self, *, tenant_id: str, vc_fact: dict, source_doc_id: str
+    ) -> FounderProfile:
+        """Create or update a FounderProfile from a parsed VC extraction fact dict."""
+        from datetime import UTC
+
+        entities = vc_fact.get("entities") or {}
+        company_name: str = entities.get("company") or "unknown"
+        person_name: str = entities.get("person") or ""
+        stage: str = entities.get("stage") or "idea"
+        statement: str = vc_fact.get("statement") or ""
+        signal_date_str: str | None = vc_fact.get("signal_date")
+
+        # Parse signal_date
+        signal_date: datetime | None = None
+        if signal_date_str:
+            try:
+                dt = datetime.fromisoformat(signal_date_str.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
+                signal_date = dt
+            except (ValueError, AttributeError):
+                signal_date = None
+
+        contact_date = signal_date or utcnow()
+
+        # Validate stage literal
+        valid_stages = {"idea", "pre-seed", "seed", "series-a", "series-b+"}
+        if stage not in valid_stages:
+            stage = "idea"
+
+        # Match on (tenant_id, company_name)
+        existing: FounderProfile | None = None
+        for f in self._founders.get(tenant_id, {}).values():
+            if f.company_name == company_name:
+                existing = f
+                break
+
+        if existing is None:
+            founder = FounderProfile(
+                tenant_id=tenant_id,
+                full_name=person_name,
+                company_name=company_name,
+                stage=stage,  # type: ignore[arg-type]
+                domain="",
+                location="",
+                last_contact_date=contact_date,
+                raw_signals=[statement] if statement else [],
+                source_doc_ids=[source_doc_id],
+            )
+            self._founders.setdefault(tenant_id, {})[founder.id] = founder
+            return founder
+
+        # Update existing founder
+        updated_signals = list(existing.raw_signals)
+        if statement and statement not in updated_signals:
+            updated_signals.append(statement)
+
+        updated_source_ids = list(existing.source_doc_ids)
+        if source_doc_id not in updated_source_ids:
+            updated_source_ids.append(source_doc_id)
+
+        updated_contact = existing.last_contact_date
+        if signal_date and signal_date > updated_contact:
+            updated_contact = signal_date
+
+        updated = existing.model_copy(update={
+            "raw_signals": updated_signals,
+            "source_doc_ids": updated_source_ids,
+            "last_contact_date": updated_contact,
+        })
+        self._founders[tenant_id][existing.id] = updated
+        return updated
+
+    async def get_signals_for_founder(
+        self, *, tenant_id: str, founder_id: UUID
+    ) -> list[FundSignal]:
+        """Return all signals for this founder, sorted by signal_date desc."""
+        items = [
+            s for s in self._signals.get(tenant_id, [])
+            if s.founder_id == founder_id
+        ]
+        items.sort(key=lambda s: s.signal_date, reverse=True)
+        return items
+
+    async def update_founder_score(
+        self, *, tenant_id: str, founder_id: UUID, score: float
+    ) -> None:
+        """Update signal_score on a FounderProfile."""
+        tenant_map = self._founders.get(tenant_id, {})
+        if founder_id in tenant_map:
+            existing = tenant_map[founder_id]
+            tenant_map[founder_id] = existing.model_copy(update={"signal_score": score})

@@ -266,6 +266,184 @@ class SqlVCRepository(VCRepository):
             ).fetchall()
         return [_row_to_signal(r) for r in rows]
 
+    async def upsert_founder_from_signal(
+        self, *, tenant_id: str, vc_fact: dict, source_doc_id: str
+    ) -> FounderProfile:
+        """Create or update a FounderProfile from a parsed VC extraction fact dict."""
+        from datetime import UTC
+        from uuid import uuid4
+
+        entities = vc_fact.get("entities") or {}
+        company_name: str = entities.get("company") or "unknown"
+        person_name: str = entities.get("person") or ""
+        stage: str = entities.get("stage") or "idea"
+        statement: str = vc_fact.get("statement") or ""
+        signal_date_str: str | None = vc_fact.get("signal_date")
+
+        # Parse signal_date
+        signal_date: datetime | None = None
+        if signal_date_str:
+            try:
+                dt = datetime.fromisoformat(signal_date_str.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
+                signal_date = dt
+            except (ValueError, AttributeError):
+                signal_date = None
+
+        contact_date = signal_date or utcnow()
+
+        # Validate stage literal
+        valid_stages = {"idea", "pre-seed", "seed", "series-a", "series-b+"}
+        if stage not in valid_stages:
+            stage = "idea"
+
+        async with session_scope(self._dsn) as session:
+            row = (
+                await session.execute(
+                    text("""
+                        SELECT id, tenant_id, full_name, company_name, stage, domain,
+                               location, last_contact_date, signal_score, raw_signals,
+                               source_doc_ids, created_at, updated_at
+                        FROM founders
+                        WHERE tenant_id = :tenant_id AND company_name = :company_name
+                        LIMIT 1
+                    """),
+                    {"tenant_id": tenant_id, "company_name": company_name},
+                )
+            ).fetchone()
+
+            if row is None:
+                # Insert new founder
+                new_id_val = uuid4()
+                now = utcnow()
+                raw_signals = [statement] if statement else []
+                source_doc_ids = [source_doc_id]
+                await session.execute(
+                    text("""
+                        INSERT INTO founders (
+                            id, tenant_id, full_name, company_name, stage, domain,
+                            location, last_contact_date, signal_score, raw_signals,
+                            source_doc_ids, created_at, updated_at
+                        ) VALUES (
+                            CAST(:id AS uuid), :tenant_id, :full_name, :company_name,
+                            :stage, :domain, :location, :last_contact_date,
+                            :signal_score, CAST(:raw_signals AS jsonb),
+                            CAST(:source_doc_ids AS jsonb), :created_at, :updated_at
+                        )
+                    """),
+                    {
+                        "id": str(new_id_val),
+                        "tenant_id": tenant_id,
+                        "full_name": person_name,
+                        "company_name": company_name,
+                        "stage": stage,
+                        "domain": "",
+                        "location": "",
+                        "last_contact_date": contact_date,
+                        "signal_score": 0.0,
+                        "raw_signals": json.dumps(raw_signals),
+                        "source_doc_ids": json.dumps(source_doc_ids),
+                        "created_at": now,
+                        "updated_at": now,
+                    },
+                )
+                return FounderProfile(
+                    id=new_id_val,
+                    tenant_id=tenant_id,
+                    full_name=person_name,
+                    company_name=company_name,
+                    stage=stage,  # type: ignore[arg-type]
+                    domain="",
+                    location="",
+                    last_contact_date=contact_date,
+                    signal_score=0.0,
+                    raw_signals=raw_signals,
+                    source_doc_ids=source_doc_ids,
+                    created_at=now,
+                    updated_at=now,
+                )
+
+            # Update existing founder
+            existing = _row_to_founder(row)
+            raw_signals = list(existing.raw_signals)
+            if statement and statement not in raw_signals:
+                raw_signals.append(statement)
+            source_doc_ids_list = list(existing.source_doc_ids)
+            if source_doc_id not in source_doc_ids_list:
+                source_doc_ids_list.append(source_doc_id)
+            new_contact = existing.last_contact_date
+            if signal_date and signal_date > new_contact:
+                new_contact = signal_date
+            now = utcnow()
+            await session.execute(
+                text("""
+                    UPDATE founders SET
+                        raw_signals = CAST(:raw_signals AS jsonb),
+                        source_doc_ids = CAST(:source_doc_ids AS jsonb),
+                        last_contact_date = :last_contact_date,
+                        updated_at = :updated_at
+                    WHERE id = CAST(:id AS uuid) AND tenant_id = :tenant_id
+                """),
+                {
+                    "raw_signals": json.dumps(raw_signals),
+                    "source_doc_ids": json.dumps(source_doc_ids_list),
+                    "last_contact_date": new_contact,
+                    "updated_at": now,
+                    "id": str(existing.id),
+                    "tenant_id": tenant_id,
+                },
+            )
+            return existing.model_copy(update={
+                "raw_signals": raw_signals,
+                "source_doc_ids": source_doc_ids_list,
+                "last_contact_date": new_contact,
+                "updated_at": now,
+            })
+
+    async def get_signals_for_founder(
+        self, *, tenant_id: str, founder_id: UUID
+    ) -> list[FundSignal]:
+        """Return all signals for this founder, sorted by signal_date desc."""
+        async with session_scope(self._dsn) as session:
+            rows = (
+                await session.execute(
+                    text("""
+                        SELECT id, tenant_id, signal_type, founder_id, company_name,
+                               signal_date, raw_text, confidence
+                        FROM fund_signals
+                        WHERE tenant_id = :tenant_id AND founder_id = CAST(:founder_id AS uuid)
+                        ORDER BY signal_date DESC
+                    """),
+                    {"tenant_id": tenant_id, "founder_id": str(founder_id)},
+                )
+            ).fetchall()
+        return [_row_to_signal(r) for r in rows]
+
+    async def update_founder_score(
+        self, *, tenant_id: str, founder_id: UUID, score: float
+    ) -> None:
+        """Update signal_score on a FounderProfile."""
+        async with session_scope(self._dsn) as session:
+            await session.execute(
+                text("""
+                    UPDATE founders SET signal_score = :score, updated_at = :updated_at
+                    WHERE id = CAST(:id AS uuid) AND tenant_id = :tenant_id
+                """),
+                {
+                    "score": score,
+                    "updated_at": utcnow(),
+                    "id": str(founder_id),
+                    "tenant_id": tenant_id,
+                },
+            )
+        logger.info(
+            "vc.update_founder_score",
+            tenant=tenant_id,
+            founder_id=str(founder_id),
+            score=score,
+        )
+
 
 def _as_uuid(value: object) -> UUID | None:
     """Coerce a DB value (UUID or str) into a uuid.UUID, or None."""

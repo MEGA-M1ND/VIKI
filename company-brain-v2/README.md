@@ -298,6 +298,52 @@ graph = build_pipeline_graph(llm, store)
 
 ---
 
+## Multi-tenancy and required headers (Phase 3)
+
+All VC routes require a tenant identifier. Provide it via:
+
+- **HTTP header**: `X-Tenant-ID: <tenant>` (preferred for API clients)
+- **Query param**: `?tenant_id=<tenant>` (accepted everywhere; existing tests use this)
+
+Without a tenant identifier, VC routes return **400 Bad Request**.  
+Invalid format (only `[a-zA-Z0-9_-]{1,64}` accepted) also returns **400**.
+
+### Rate limits
+
+| Path prefix | Limit | Window |
+|-------------|-------|--------|
+| `/ingest`   | 100 req | 60 s |
+| `/ask`      | 60 req  | 60 s |
+| `/vc`       | 120 req | 60 s |
+
+When exceeded, the API returns **429** with a `Retry-After` header.
+
+---
+
+## Retrieval evaluation (`make eval`)
+
+```bash
+make eval
+# Runs: python -m app.eval.runner --output eval_results/
+```
+
+Seeds an in-memory store with golden records, issues 3 natural-language
+queries, and writes a timestamped JSON report to `eval_results/`.
+
+**Reading the report** (`eval_results/YYYY-MM-DD_HH-MM.json`):
+
+| Field                | Meaning                                                   |
+|----------------------|-----------------------------------------------------------|
+| `precision_at_5`     | Fraction of top-5 results that matched expected companies |
+| `mrr`                | Reciprocal rank of first correct hit (0 if none in top-5) |
+| `noise_rate`         | Fraction of top-5 that contained noise patterns           |
+| `temporal_respected` | True if the temporal cutoff was extracted and applied     |
+| `latency_ms`         | Wall-clock retrieval latency in milliseconds              |
+
+The `summary` block gives means across all cases.
+
+---
+
 ## Design principles
 
 - **Interfaces over implementations** — every major role is an ABC or Protocol. Swap without touching orchestration.
