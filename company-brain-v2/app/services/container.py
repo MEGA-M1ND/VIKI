@@ -16,9 +16,10 @@ from dataclasses import dataclass, field
 from app.connectors.base import BaseConnector
 from app.context.base import ContextProvider
 from app.context.provider import MemoryContextProvider
-from app.core.config import Settings, get_settings
+from app.core.config import MemoryBackend, Settings, get_settings
 from app.core.logging import get_logger
 from app.core.reranker import CrossEncoderReranker
+from app.db.vc_repo import InMemoryVCRepository, VCRepository
 from app.ingestion.base import BaseExtractor
 from app.llm.base import LLMProvider
 from app.memory.base import MemoryStore
@@ -40,6 +41,7 @@ class ServiceContainer:
     extractor: BaseExtractor | None = None
     llm: LLMProvider | None = None
     reranker: CrossEncoderReranker | None = None
+    vc_repository: VCRepository | None = None
 
     @classmethod
     def build(cls, settings: Settings | None = None) -> ServiceContainer:
@@ -93,6 +95,15 @@ class ServiceContainer:
         if settings.reranker_enabled:
             reranker = CrossEncoderReranker()
 
+        # VC repository: SQL when on pgvector with a DSN, else in-memory.
+        vc_repository: VCRepository
+        if settings.memory_backend is MemoryBackend.PGVECTOR and settings.memory_dsn:
+            from app.db.vc_repo_sql import SqlVCRepository
+
+            vc_repository = SqlVCRepository(settings.memory_dsn)
+        else:
+            vc_repository = InMemoryVCRepository()
+
         logger.info(
             "container.built",
             env=settings.app_env,
@@ -100,6 +111,7 @@ class ServiceContainer:
             connectors=[type(c).__name__ for c in connectors],
             llm_configured=llm is not None,
             reranker_enabled=reranker is not None,
+            vc_repo=type(vc_repository).__name__,
         )
         return cls(
             settings=settings,
@@ -110,4 +122,5 @@ class ServiceContainer:
             extractor=extractor,
             llm=llm,
             reranker=reranker,
+            vc_repository=vc_repository,
         )

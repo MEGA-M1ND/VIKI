@@ -19,6 +19,7 @@ from app.api.routes_health import router as health_router
 from app.api.routes_ingest import router as ingest_router
 from app.api.routes_memory import router as memory_router
 from app.api.routes_ui import router as ui_router
+from app.api.routes_vc import router as vc_router
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.scheduler.cron import Scheduler
@@ -76,6 +77,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(memory_router)
     app.include_router(ask_router)
     app.include_router(ui_router)
+    app.include_router(vc_router)
 
     return app
 
