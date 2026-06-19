@@ -11,6 +11,8 @@ and stored in the memory_records.embedding column.
 """
 from __future__ import annotations
 
+import json
+
 from sqlalchemy import text
 
 from app.core.logging import get_logger
@@ -65,8 +67,8 @@ class PgVectorMemoryStore(MemoryStore):
                         embedding, record_metadata, created_at, updated_at
                     ) VALUES (
                         :id, :tenant_id, :content, :record_type, :source,
-                        :source_doc_id, :source_refs, :source_type_hint,
-                        CAST(:embedding AS vector), :record_metadata,
+                        :source_doc_id, CAST(:source_refs AS jsonb), :source_type_hint,
+                        CAST(:embedding AS vector), CAST(:record_metadata AS jsonb),
                         :created_at, :updated_at
                     )
                     ON CONFLICT (id) DO UPDATE SET
@@ -87,10 +89,10 @@ class PgVectorMemoryStore(MemoryStore):
                     "record_type": record.record_type,
                     "source": record.source,
                     "source_doc_id": source_doc_id,
-                    "source_refs": record.source_refs,
+                    "source_refs": json.dumps(record.source_refs),
                     "source_type_hint": record.source_type_hint,
                     "embedding": str(embedding),
-                    "record_metadata": record.metadata,
+                    "record_metadata": json.dumps(record.metadata),
                     "created_at": record.created_at,
                     "updated_at": utcnow(),
                 },
