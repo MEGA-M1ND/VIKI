@@ -44,4 +44,7 @@ migrate-create: ## Create a new Alembic migration (usage: make migrate-create MS
 	cd company-brain-v2 && alembic revision --autogenerate -m "$(MSG)"
 
 eval: ## Run the evaluation suite and save results
-	cd company-brain-v2 && python -m app.eval.runner
+	cd company-brain-v2 && python -m app.eval.runner --seed --output eval_results/
+
+demo: ## Run the standalone demo script (no API key needed)
+	cd company-brain-v2 && python demo/demo_script.py

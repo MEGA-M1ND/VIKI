@@ -1,0 +1,51 @@
+{
+  "run_at": "2026-06-19T14:01:07.444866Z",
+  "git_commit": "093ea18",
+  "cases": [
+    {
+      "query": "which companies approached me for a job lately",
+      "precision_at_5": 0.8,
+      "mrr": 1.0,
+      "noise_rate": 0.0,
+      "temporal_respected": true,
+      "latency_ms": 0.13,
+      "hits": [
+        "Acme Corp hiring manager approached me for a job as Engineering Manager",
+        "Google recruiter approached me about a Staff Engineer job opportunity",
+        "Alice Chen from Acme AI is raising a $2M seed round. She reached out asking for an intro to Sequoia.",
+        "Bob from DataStream followed up on our meeting. He sent over the term sheet for review.",
+        "Acme AI pitch deck arrived. They are targeting Series A next year but doing a seed bridge now."
+      ]
+    },
+    {
+      "query": "founders raising seed round",
+      "precision_at_5": 1.0,
+      "mrr": 1.0,
+      "noise_rate": 0.0,
+      "temporal_respected": true,
+      "latency_ms": 0.07,
+      "hits": [
+        "Alice Chen from Acme AI is raising a $2M seed round. She reached out asking for an intro to Sequoia.",
+        "Acme AI pitch deck arrived. They are targeting Series A next year but doing a seed bridge now."
+      ]
+    },
+    {
+      "query": "who followed up with me this week",
+      "precision_at_5": 1.0,
+      "mrr": 0.0,
+      "noise_rate": 0.0,
+      "temporal_respected": true,
+      "latency_ms": 0.13,
+      "hits": [
+        "Carol followed up about the partnership discussion. She wants to reconnect this week.",
+        "Bob from DataStream followed up on our meeting. He sent over the term sheet for review.",
+        "Alice Chen from Acme AI is raising a $2M seed round. She reached out asking for an intro to Sequoia."
+      ]
+    }
+  ],
+  "summary": {
+    "mean_precision_at_5": 0.9333,
+    "mean_mrr": 0.6667,
+    "noise_rate": 0.0
+  }
+}

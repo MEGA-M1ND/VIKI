@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_container, get_llm_provider
+from app.core.dedup import deduplicate_by_source
 from app.core.logging import get_logger
 from app.core.source_weights import apply_source_weight
 from app.core.temporal import extract_temporal_constraint
@@ -72,20 +73,26 @@ async def ask(
         filters=filters,
     )
 
-    # 3. Optionally rerank with cross-encoder
+    # 3. Convert to ScoredFact for dedup + optional reranking
+    scored: list[ScoredFact] = [
+        ScoredFact(
+            record=r.record,
+            score=r.score,
+            source_doc_id=r.record.source_doc_id,
+        )
+        for r in results
+    ]
+
+    # 3a. Deduplicate by source (backend-agnostic — applies to both in-memory and pgvector)
+    scored = deduplicate_by_source(scored)
+
+    # 3b. Optionally rerank with cross-encoder
     reranker = container.reranker
-    if reranker is not None and results:
-        scored = [
-            ScoredFact(
-                record=r.record,
-                score=r.score,
-                source_doc_id=r.record.source_doc_id,
-            )
-            for r in results
-        ]
+    if reranker is not None and scored:
         top_k = getattr(container.settings, "reranker_top_k", req.limit)
         scored = reranker.rerank(cleaned_query, scored, top_k=top_k)
-        results = [sf.to_retrieval_result() for sf in scored]
+
+    results = [sf.to_retrieval_result() for sf in scored]
 
     # 4. Apply source-type weights and re-sort
     weighted_results: list[RetrievalResult] = []

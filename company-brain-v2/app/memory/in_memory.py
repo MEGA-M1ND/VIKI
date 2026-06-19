@@ -10,13 +10,26 @@ It deliberately contains no database, embedding, or vector-index logic.
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime
 
 from app.core.logging import get_logger
+from app.core.source_weights import apply_source_weight
 from app.memory.base import MemoryStore
 from app.models.memory import MemoryRecord
 from app.models.retrieval import RetrievalQuery, RetrievalResult
 
 logger = get_logger(__name__)
+
+# Source-type hints that represent low-signal automated content.
+# Records carrying these hints are excluded from all queries regardless of other filters.
+_NOISE_SOURCE_TYPES: frozenset[str] = frozenset(
+    {
+        "gmail_newsletter",
+        "gmail_digest",
+        "gmail_promotional",
+        "gmail_job_alert",
+    }
+)
 
 
 class InMemoryStore(MemoryStore):
@@ -45,9 +58,13 @@ class InMemoryStore(MemoryStore):
         for record in records:
             if not _matches_filters(record, query.filters):
                 continue
-            score = _naive_score(record.content, terms)
-            if score > 0.0:
-                results.append(RetrievalResult(record=record, score=score))
+            raw_score = _naive_score(record.content, terms)
+            if raw_score <= 0.0:
+                continue
+            hint = record.source_type_hint or record.metadata.get("source_type_hint")
+            weighted = apply_source_weight(raw_score, hint)
+            if weighted > 0.0:
+                results.append(RetrievalResult(record=record, score=weighted))
 
         results.sort(key=lambda r: r.score, reverse=True)
         logger.info(
@@ -67,13 +84,31 @@ class InMemoryStore(MemoryStore):
 
 
 def _matches_filters(record: MemoryRecord, filters: dict[str, object]) -> bool:
-    """Return ``True`` if the record satisfies all equality filters."""
+    """Return True if *record* passes all filters.
+
+    Handles two special cases before the generic equality loop:
+    - ``after_date``: temporal lower-bound on ``created_at`` (``>=``).
+    - noise source types: always excluded regardless of query.
+    """
+    # Noise exclusion: drop low-signal automated content unconditionally.
+    if record.source_type_hint in _NOISE_SOURCE_TYPES:
+        return False
+
+    # Temporal filter: record must be at least as recent as after_date.
+    after_date = filters.get("after_date")
+    if after_date is not None and isinstance(after_date, datetime) and record.created_at < after_date:
+        return False
+
+    # Generic equality filters (skip after_date already handled above).
     for key, expected in filters.items():
+        if key == "after_date":
+            continue
         actual = getattr(record, key, None)
         if actual is None:
             actual = record.metadata.get(key)
         if actual != expected:
             return False
+
     return True
 
 

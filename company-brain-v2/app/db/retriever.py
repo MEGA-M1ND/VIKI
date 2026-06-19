@@ -24,6 +24,29 @@ logger = get_logger(__name__)
 _RRF_K = 60
 
 
+def rrf_merge(
+    vector_ranked_ids: list[str],
+    bm25_ranked_ids: list[str],
+    k: int = _RRF_K,
+) -> dict[str, float]:
+    """Merge two ranked ID lists using Reciprocal Rank Fusion.
+
+    Args:
+        vector_ranked_ids: IDs in vector-rank order (best first, rank 0 = highest).
+        bm25_ranked_ids: IDs in BM25-rank order (best first, rank 0 = highest).
+        k: RRF smoothing constant (default 60).
+
+    Returns:
+        Mapping from record ID to combined RRF score (higher = more relevant).
+    """
+    scores: dict[str, float] = {}
+    for rank, rec_id in enumerate(vector_ranked_ids):
+        scores[rec_id] = scores.get(rec_id, 0.0) + 1.0 / (k + rank)
+    for rank, rec_id in enumerate(bm25_ranked_ids):
+        scores[rec_id] = scores.get(rec_id, 0.0) + 1.0 / (k + rank)
+    return scores
+
+
 class HybridRetriever:
     """Combines pgvector cosine similarity with PostgreSQL BM25 full-text search.
 
@@ -110,12 +133,11 @@ class HybridRetriever:
         vec_rows = (await self._session.execute(vector_sql, params)).fetchall()
         bm25_rows = (await self._session.execute(bm25_sql, params)).fetchall()
 
-        # Build RRF score map: id -> sum of 1/(k + rank)
-        rrf_scores: dict[str, float] = {}
-        for row in vec_rows:
-            rrf_scores[row.id] = rrf_scores.get(row.id, 0.0) + 1.0 / (_RRF_K + row.rank)
-        for row in bm25_rows:
-            rrf_scores[row.id] = rrf_scores.get(row.id, 0.0) + 1.0 / (_RRF_K + row.rank)
+        # Build RRF score map using the pure rrf_merge helper
+        rrf_scores = rrf_merge(
+            vector_ranked_ids=[row.id for row in vec_rows],
+            bm25_ranked_ids=[row.id for row in bm25_rows],
+        )
 
         if not rrf_scores:
             return []

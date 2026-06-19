@@ -15,13 +15,13 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.eval.golden import GOLDEN_CASES, EvalCase
 from app.eval.metrics import EvalReport, EvalResult
+from app.eval.seed import seed_eval_store  # noqa: F401 — re-exported for backward compat
 from app.memory.base import MemoryStore
-from app.models.memory import MemoryRecord
 from app.models.retrieval import RetrievalQuery
 
 
@@ -41,114 +41,6 @@ def _get_git_commit() -> str:
         return result.stdout.strip() or "unknown"
     except Exception:  # noqa: BLE001
         return "unknown"
-
-
-async def seed_eval_store(store: MemoryStore, tenant_id: str) -> None:
-    """Seed an in-memory store with records matching the golden eval cases.
-
-    Writes synthetic memory records for each golden case so that the eval
-    runner can measure recall against a realistic (but controlled) dataset.
-
-    Args:
-        store: The memory store to seed.
-        tenant_id: The tenant partition to write records into.
-    """
-    now = datetime.now(tz=UTC)
-
-    # Records for case 0: job outreach emails from known companies
-    job_records = [
-        (
-            "Google reached out to me about a Senior Engineer role. "
-            "The recruiter wants to set up a call next week.",
-            now - timedelta(days=5),
-        ),
-        (
-            "Stripe is hiring and their recruiter contacted me about a "
-            "Staff Engineer position on the payments team.",
-            now - timedelta(days=10),
-        ),
-        (
-            "Acme Corp approached me for a job as Engineering Manager. "
-            "They found my profile on LinkedIn.",
-            now - timedelta(days=15),
-        ),
-    ]
-    for content, created_at in job_records:
-        record = MemoryRecord(
-            tenant_id=tenant_id,
-            content=content,
-            record_type="entity",
-            metadata={"source": "gmail"},
-            created_at=created_at,
-            updated_at=created_at,
-        )
-        await store.write(record)
-
-    # Records for case 1: founder raising signals
-    founder_records = [
-        (
-            "Alice Chen from Acme AI is raising a $2M seed round. "
-            "She reached out asking for an intro to Sequoia.",
-            now - timedelta(days=3),
-        ),
-        (
-            "Acme AI pitch deck arrived. They are targeting Series A next year "
-            "but doing a seed bridge now.",
-            now - timedelta(days=7),
-        ),
-    ]
-    for content, created_at in founder_records:
-        record = MemoryRecord(
-            tenant_id=tenant_id,
-            content=content,
-            record_type="fact",
-            metadata={"source": "gmail"},
-            created_at=created_at,
-            updated_at=created_at,
-        )
-        await store.write(record)
-
-    # Records for case 2: follow-up this week
-    followup_records = [
-        (
-            "Bob from DataStream followed up on our meeting. "
-            "He sent over the term sheet for review.",
-            now - timedelta(days=1),
-        ),
-        (
-            "Carol followed up about the partnership discussion. "
-            "She wants to reconnect this week.",
-            now - timedelta(days=2),
-        ),
-    ]
-    for content, created_at in followup_records:
-        record = MemoryRecord(
-            tenant_id=tenant_id,
-            content=content,
-            record_type="action_item",
-            metadata={"source": "gmail"},
-            created_at=created_at,
-            updated_at=created_at,
-        )
-        await store.write(record)
-
-    # Noise records that should NOT match (newsletters, automated emails)
-    noise_records = [
-        "Weekly newsletter: unsubscribe here. Digest of this week's top stories.",
-        "LinkedIn Jobs alert: 50 new jobs matching your profile. View in browser.",
-        "Automated system notification: your CI/CD pipeline completed successfully.",
-        "No-reply: your account statement is ready. noreply@bank.com",
-    ]
-    for content in noise_records:
-        record = MemoryRecord(
-            tenant_id=tenant_id,
-            content=content,
-            record_type="fact",
-            metadata={"source": "gmail"},
-            created_at=now - timedelta(days=60),
-            updated_at=now - timedelta(days=60),
-        )
-        await store.write(record)
 
 
 async def run_eval(store: MemoryStore, cases: list[EvalCase]) -> EvalReport:
@@ -293,11 +185,18 @@ if __name__ == "__main__":
         default="eval_results",
         help="Directory to write JSON output (default: eval_results/)",
     )
+    parser.add_argument(
+        "--seed",
+        action="store_true",
+        default=False,
+        help="Seed the store with fixture data before running eval.",
+    )
     args = parser.parse_args()
 
     async def _main() -> None:
         store = InMemoryStore()
-        await seed_eval_store(store, tenant_id="eval_test")
+        if args.seed:
+            await seed_eval_store(store, tenant_id="eval_test")
         report = await run_eval(store, GOLDEN_CASES)
         _print_report(report)
 
