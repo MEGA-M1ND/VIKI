@@ -24,7 +24,9 @@ class MemoryRecord(DomainModel):
         content: Canonical text used for retrieval/synthesis.
         record_type: Category mirroring the originating fact type.
         source: Origin system, if traceable to a single source.
+        source_doc_id: Source document ID for deduplication.
         source_refs: Ids of the documents/facts that produced this record.
+        source_type_hint: Source sub-type for scoring (e.g. "gmail_newsletter").
         embedding: Optional precomputed embedding vector.
         metadata: Arbitrary structured attributes (tags, entities, scores).
         created_at: First persisted.
@@ -36,7 +38,9 @@ class MemoryRecord(DomainModel):
     content: str
     record_type: FactType = FactType.FACT
     source: SourceType | None = None
+    source_doc_id: str | None = None  # source document ID for deduplication
     source_refs: list[str] = Field(default_factory=list)
+    source_type_hint: str | None = None  # e.g. "gmail_newsletter" for weight scoring
     embedding: list[float] | None = None
     metadata: dict[str, object] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utcnow)

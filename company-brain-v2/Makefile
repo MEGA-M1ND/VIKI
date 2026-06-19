@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install format lint typecheck test run-api clean
+.PHONY: help install format lint typecheck test run-api clean migrate migrate-create eval
 
 # Use uv if available, otherwise fall back to pip/python from the active venv.
 UV := $(shell command -v uv 2>/dev/null)
@@ -36,3 +36,12 @@ run-api: ## Run the FastAPI app locally with reload
 clean: ## Remove caches and build artifacts
 	rm -rf .ruff_cache .mypy_cache .pytest_cache build dist *.egg-info
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+
+migrate: ## Run all pending Alembic migrations
+	cd company-brain-v2 && alembic upgrade head
+
+migrate-create: ## Create a new Alembic migration (usage: make migrate-create MSG="description")
+	cd company-brain-v2 && alembic revision --autogenerate -m "$(MSG)"
+
+eval: ## Run the evaluation suite and save results
+	cd company-brain-v2 && python -m app.eval.runner
