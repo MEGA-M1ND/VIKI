@@ -1,0 +1,41 @@
+{
+  "run_at": "2026-06-19T09:02:07.008622Z",
+  "git_commit": "1128982",
+  "cases": [
+    {
+      "query": "which companies approached me for a job lately",
+      "precision_at_5": 0.0,
+      "mrr": 0.0,
+      "noise_rate": 0.0,
+      "temporal_respected": true,
+      "latency_ms": 0.15,
+      "hits": []
+    },
+    {
+      "query": "founders raising seed round",
+      "precision_at_5": 1.0,
+      "mrr": 1.0,
+      "noise_rate": 0.0,
+      "temporal_respected": true,
+      "latency_ms": 0.11,
+      "hits": [
+        "Alice Chen from Acme AI is raising a $2M seed round. She reached out asking for an intro to Sequoia.",
+        "Acme AI pitch deck arrived. They are targeting Series A next year but doing a seed bridge now."
+      ]
+    },
+    {
+      "query": "who followed up with me this week",
+      "precision_at_5": 1.0,
+      "mrr": 0.0,
+      "noise_rate": 0.0,
+      "temporal_respected": true,
+      "latency_ms": 0.1,
+      "hits": []
+    }
+  ],
+  "summary": {
+    "mean_precision_at_5": 0.6667,
+    "mean_mrr": 0.3333,
+    "noise_rate": 0.0
+  }
+}

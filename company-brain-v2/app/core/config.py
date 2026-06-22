@@ -120,6 +120,17 @@ class Settings(BaseSettings):
         description="Minimum classifier confidence required to proceed with extraction.",
     )
 
+    # --- Retrieval: hybrid + reranker ----------------------------------------
+    reranker_enabled: bool = Field(
+        default=True, description="Enable cross-encoder reranking."
+    )
+    reranker_top_k: int = Field(
+        default=10, description="Number of results after reranking."
+    )
+    hybrid_candidates: int = Field(
+        default=20, description="Candidates fetched before reranking."
+    )
+
     @property
     def is_production(self) -> bool:
         """Whether the service is running in a production-like environment."""

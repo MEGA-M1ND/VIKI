@@ -36,6 +36,21 @@ class LLMProvider(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        """Generate embedding vectors for a list of texts.
+
+        Args:
+            texts: Input strings to embed.
+
+        Returns:
+            List of float vectors, one per input string.
+
+        Raises:
+            ExtractionError: The embedding call failed.
+        """
+        raise NotImplementedError
+
     async def complete(
         self,
         prompt: str,
