@@ -15,6 +15,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.core.logging import get_logger
+from app.graphs.nodes.dedupe import _dedupe_key, make_dedupe_node
 from app.graphs.state import IngestionState
 from app.ingestion.base import BaseExtractor
 from app.memory.base import MemoryStore
@@ -45,16 +46,16 @@ def build_ingestion_graph(extractor: BaseExtractor, store: MemoryStore) -> Compi
         return {**state, "facts": facts}
 
     async def persist_node(state: IngestionState) -> dict:
-        facts = state.get("facts") or []
+        new_facts = state.get("new_facts") or state.get("facts") or []
         records: list[MemoryRecord] = []
-        for fact in facts:
+        for fact in new_facts:
             record = MemoryRecord(
                 tenant_id=fact.tenant_id,
                 content=fact.statement,
                 record_type=fact.fact_type,
                 source=fact.source,
                 source_refs=[fact.document_id, fact.id],
-                metadata={"confidence": fact.confidence},
+                metadata={"confidence": fact.confidence, "dedupe_key": _dedupe_key(fact)},
             )
             records.append(await store.write(record))
         logger.info("ingest.persisted", records=len(records))
@@ -62,14 +63,17 @@ def build_ingestion_graph(extractor: BaseExtractor, store: MemoryStore) -> Compi
 
     def should_persist(state: IngestionState) -> str:
         """Skip persistence if extraction errored or produced nothing."""
-        if state.get("error") or not state.get("facts"):
+        if state.get("error"):
             return END
-        return "persist"
+        new_facts = state.get("new_facts") or state.get("facts") or []
+        return END if not new_facts else "persist"
 
     graph = StateGraph(IngestionState)
     graph.add_node("extract", extract_node)
+    graph.add_node("dedupe", make_dedupe_node(store))
     graph.add_node("persist", persist_node)
     graph.set_entry_point("extract")
-    graph.add_conditional_edges("extract", should_persist, {"persist": "persist", END: END})
+    graph.add_conditional_edges("extract", should_persist, {"persist": "dedupe", END: END})
+    graph.add_edge("dedupe", "persist")
     graph.add_edge("persist", END)
     return graph.compile()

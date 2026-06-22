@@ -35,8 +35,19 @@ def _dedupe_key(fact: ExtractedFact) -> str:
 async def _default_find_duplicate(
     fact: ExtractedFact, store: MemoryStore
 ) -> MemoryRecord | None:
-    """Naive deduper: look for records with a matching dedupe_key in metadata."""
+    """Check for an existing record with the same content.
+
+    First tries a direct dedupe_key lookup (O(1) SQL for pgvector, O(n) scan
+    for in-memory). Falls back to vector similarity for near-duplicate detection.
+    """
     key = _dedupe_key(fact)
+
+    # Fast path: exact hash match via direct metadata lookup
+    existing = await store.find_by_dedupe_key(tenant_id=fact.tenant_id, dedupe_key=key)
+    if existing:
+        return existing
+
+    # Slow path: semantic similarity for near-duplicates
     query = RetrievalQuery(
         tenant_id=fact.tenant_id,
         text=fact.statement,
@@ -45,8 +56,6 @@ async def _default_find_duplicate(
     )
     results = await store.query(query)
     for result in results:
-        if result.record.metadata.get("dedupe_key") == key:
-            return result.record
         if result.score >= _SIMILARITY_THRESHOLD:
             return result.record
     return None

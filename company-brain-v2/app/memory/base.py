@@ -63,3 +63,11 @@ class MemoryStore(ABC):
     async def health_check(self) -> bool:
         """Return ``True`` if the backend is reachable and ready."""
         raise NotImplementedError
+
+    async def find_by_dedupe_key(self, *, tenant_id: str, dedupe_key: str) -> MemoryRecord | None:
+        """Return the first record with a matching dedupe_key in metadata, or None.
+
+        Default implementation returns None (no-op). Backends that support
+        direct metadata lookup should override this for O(1) dedup checks.
+        """
+        return None

@@ -178,6 +178,25 @@ class PgVectorMemoryStore(MemoryStore):
             )
         return result.rowcount > 0
 
+    async def find_by_dedupe_key(self, *, tenant_id: str, dedupe_key: str) -> MemoryRecord | None:
+        """Direct SQL lookup by dedupe_key stored in record_metadata JSONB."""
+        async with session_scope(self._dsn) as session:
+            row = (
+                await session.execute(
+                    text("""
+                        SELECT id, tenant_id, content, record_type, source,
+                               source_doc_id, source_refs, source_type_hint,
+                               record_metadata, created_at, updated_at
+                        FROM memory_records
+                        WHERE tenant_id = :tenant_id
+                          AND record_metadata->>'dedupe_key' = :dedupe_key
+                        LIMIT 1
+                    """),
+                    {"tenant_id": tenant_id, "dedupe_key": dedupe_key},
+                )
+            ).fetchone()
+        return _row_to_record(row) if row else None
+
     async def health_check(self) -> bool:
         """Check if the database is reachable.
 

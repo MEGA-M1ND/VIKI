@@ -79,6 +79,12 @@ class InMemoryStore(MemoryStore):
         removed = self._data.get(tenant_id, {}).pop(record_id, None)
         return removed is not None
 
+    async def find_by_dedupe_key(self, *, tenant_id: str, dedupe_key: str) -> MemoryRecord | None:
+        for record in self._data.get(tenant_id, {}).values():
+            if record.metadata.get("dedupe_key") == dedupe_key:
+                return record
+        return None
+
     async def health_check(self) -> bool:
         return True
 
