@@ -5,6 +5,7 @@ created per-request via get_session().
 """
 from __future__ import annotations
 
+import ssl
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import lru_cache
@@ -14,6 +15,25 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def connect_args_for(dsn: str) -> dict:
+    """Return asyncpg connect args for *dsn*.
+
+    Cloud Postgres (Neon, Supabase, etc.) requires TLS. asyncpg does not read
+    libpq's ``?sslmode=`` query param, so we enable SSL explicitly for any
+    non-local host. We use ``sslmode=require`` semantics (encrypt but do not
+    verify the CA) because managed poolers present certs not in the default
+    trust chain. Local Docker/Postgres stays plaintext.
+    """
+    host = dsn.split("@")[-1]
+    is_local = host.startswith(("localhost", "127.0.0.1"))
+    if is_local:
+        return {}
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return {"ssl": ctx}
 
 
 @lru_cache(maxsize=1)
@@ -32,6 +52,7 @@ def get_engine(dsn: str):
         pool_size=10,
         max_overflow=20,
         echo=False,
+        connect_args=connect_args_for(dsn),
     )
     logger.info("db.engine.created", dsn=dsn.split("@")[-1])  # log host, not creds
     return engine

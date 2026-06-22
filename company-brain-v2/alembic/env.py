@@ -8,11 +8,18 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from app.core.config import get_settings
+from app.db.engine import connect_args_for
 from app.db.models import Base
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Single source of truth: prefer the app's CB_MEMORY_DSN over alembic.ini.
+_dsn = get_settings().memory_dsn
+if _dsn:
+    config.set_main_option("sqlalchemy.url", _dsn)
 
 target_metadata = Base.metadata
 
@@ -40,7 +47,9 @@ def do_run_migrations(connection) -> None:
 async def run_async_migrations() -> None:
     """Create an async engine and run migrations."""
     url = config.get_main_option("sqlalchemy.url")
-    connectable = create_async_engine(url, poolclass=pool.NullPool)
+    connectable = create_async_engine(
+        url, poolclass=pool.NullPool, connect_args=connect_args_for(url)
+    )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await connectable.dispose()

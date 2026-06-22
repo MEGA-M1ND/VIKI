@@ -120,9 +120,12 @@ class ServiceContainer:
 
             connectors.append(NotionConnector(token=notion_token, database_ids=notion_db_ids))
 
-        from app.ingestion.passthrough import PassthroughExtractor
-
-        extractor: BaseExtractor = PassthroughExtractor()
+        if llm is not None:
+            from app.ingestion.llm_extractor import LLMExtractor
+            extractor: BaseExtractor = LLMExtractor(llm)
+        else:
+            from app.ingestion.passthrough import PassthroughExtractor
+            extractor = PassthroughExtractor()
 
         # Wire cross-encoder reranker (degrades gracefully if sentence-transformers missing)
         reranker: CrossEncoderReranker | None = None
